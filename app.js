@@ -274,7 +274,7 @@
         const courts = Array.from(venue.courts).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         const nums = courts.map((c) => c.replace(/^Court\s*/i, ''));
         const courtText = !courts.length ? '' : courts.length === 1 ? courts[0] : (courts.every((c) => /^Court/i.test(c)) ? 'Courts ' + nums.slice(0, -1).join(', ') + ' and ' + nums[nums.length - 1] : courts.join(', '));
-        html += '<div class="venue-banner">' + pin + '<div><b>' + esc(venue.name) + '</b><span>' + venue.games.length + (venue.games.length === 1 ? ' ' + esc(CLUB) + ' game' : ' ' + esc(CLUB) + ' games') + (courtText ? ' · ' + esc(courtText) : '') + '</span></div>' +
+        html += '<div class="venue-banner">' + pin + '<div><b>' + esc(venue.name) + '</b><span>' + [live.length ? live.length + ' live' : '', recent.length ? recent.length + ' finished' : '', upcoming.length ? upcoming.length + ' to come' : ''].filter(Boolean).join(' · ') + (courtText ? ' · ' + esc(courtText) : '') + '</span></div>' +
           '<a class="btn" href="' + mapsUrl(venue.games[0]) + '" target="_blank" rel="noopener">Directions</a></div>';
       }
       html += '</div>';
