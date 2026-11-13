@@ -323,3 +323,9 @@ table.sortable thead th[aria-sort="ascending"]::after { content: " \25B4"; }
 .flow-strip .fq b { font-family: var(--display); font-size: 24px; font-weight: 700; color: var(--ink); white-space: nowrap; }
 .flow-strip .fq.won { background: var(--tint); }
 .flow-strip .fq.lost { background: var(--bg); }
+
+/* Long messages inside stat tables wrap instead of pushing the columns off screen */
+table.box td.empty { white-space: normal; }
+.stats-wait h3 { margin: 0 0 6px; font-family: var(--display); font-size: 22px; color: var(--navy); }
+.stats-wait p { margin: 0; color: var(--muted); }
+.box-grid .stats-wait { grid-column: 1 / -1; }
