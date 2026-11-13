@@ -27,6 +27,8 @@ window.CLUB_CONFIG = {
   clubPattern: '\\bBarossa\\b',
   // Team colour words kept in the short name ("Settlers 1 Green").
   colourWords: ['Green', 'Gold', 'White'],
+  // Where the live foul tracker's data lives (the Linode scraper). Leave empty to hide the fouls card.
+  foulsBase: '',
   timeZone: 'Australia/Adelaide',
   // How often to refresh while any Settlers game is live (milliseconds).
   liveRefreshMs: 60000
