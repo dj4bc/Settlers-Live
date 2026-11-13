@@ -13,7 +13,7 @@
 
   let DATA = null;        // { games, teams, rounds, fetchedAt }
   let refreshTimer = null;
-  const ui = { age: 'All', sex: 'All', round: null };
+  const ui = { age: 'All', sex: 'All', venue: 'All', round: null };
 
   /* ---------- helpers ---------- */
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -180,6 +180,7 @@
     ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(g.lat + ',' + g.lng)
     : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(g.venue);
   const pin = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>';
+  const pinSm = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>';
   const starIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 17.3l-6.2 3.6 1.6-7-5.4-4.7 7.1-.6L12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7z"></path></svg>';
 
   function opponentText(v) {
@@ -229,11 +230,25 @@
   function pageHome() {
     const now = Date.now();
     const ages = Array.from(new Set(Array.from(DATA.teams.values()).map((t) => t.age))).sort((a, b) => ageNum(a) - ageNum(b));
-    const games = DATA.games.filter(gameMatches);
-    const live = games.filter((g) => g.status === 'live');
     const horizon = now + 8 * 864e5;
-    const upcoming = games.filter((g) => g.status === 'upcoming' && !g.bye && !g.postponed && g.start.getTime() > now - 3 * 3600e3 && g.start.getTime() < horizon);
-    const recent = games.filter((g) => g.status === 'final' && !g.bye && g.start.getTime() > now - 2 * 864e5).reverse();
+    const inWindow = (g) => !g.bye && (g.status === 'live' ||
+      (g.status === 'upcoming' && !g.postponed && g.start.getTime() > now - 3 * 3600e3 && g.start.getTime() < horizon) ||
+      (g.status === 'final' && g.start.getTime() > now - 2 * 864e5));
+    const ageGames = DATA.games.filter((g) => gameMatches(g) && inWindow(g));
+    // Venues with games in this window (live, just finished or coming up), busiest first.
+    const venueMap = new Map();
+    ageGames.forEach((g) => {
+      if (!g.venue) return;
+      if (!venueMap.has(g.venue)) venueMap.set(g.venue, { name: g.venue, short: g.venueShort || g.venue, games: [], courts: new Set() });
+      const v = venueMap.get(g.venue); v.games.push(g); if (g.court) v.courts.add(g.court);
+    });
+    const venues = Array.from(venueMap.values()).sort((a, b) => b.games.length - a.games.length || a.short.localeCompare(b.short));
+    if (ui.venue !== 'All' && !venueMap.has(ui.venue)) ui.venue = 'All';
+    const venue = ui.venue === 'All' ? null : venueMap.get(ui.venue);
+    const games = venue ? venue.games : ageGames;
+    const live = games.filter((g) => g.status === 'live');
+    const upcoming = games.filter((g) => g.status === 'upcoming');
+    const recent = games.filter((g) => g.status === 'final').reverse();
     let html = '';
 
     const mine = myTeamIds().filter((id) => DATA.teams.has(id)).map((id) => DATA.teams.get(id)).sort(teamSort);
@@ -249,7 +264,21 @@
     }
 
     html += '<div class="page-head"><div><div class="eyebrow">' + esc(fLongDay.format(new Date())) + '</div><h1 class="page-title">Game day</h1>' +
-      '<div class="page-sub">' + (live.length ? live.length + ' live · ' : '') + upcoming.length + (upcoming.length === 1 ? ' ' + CLUB + ' game' : ' ' + CLUB + ' games') + ' in the next week</div></div></div>' + filterChips(ages);
+      '<div class="page-sub">' + (live.length ? live.length + ' live · ' : '') + upcoming.length + (upcoming.length === 1 ? ' ' + CLUB + ' game' : ' ' + CLUB + ' games') + (venue ? ' at ' + esc(venue.name) : '') + ' in the next week</div></div></div>' + filterChips(ages);
+
+    if (venues.length > 1 || venue) {
+      html += '<div class="venue-filter"><div class="venue-label">Venue</div><div class="venue-chips" role="group" aria-label="Filter by venue">' +
+        '<button class="chip" type="button" data-venue="All" aria-pressed="' + !venue + '">All venues <small>' + ageGames.length + '</small></button>' +
+        venues.map((v) => '<button class="chip" type="button" data-venue="' + esc(v.name) + '" aria-pressed="' + (venue === v) + '" title="' + esc(v.name) + '">' + pinSm + esc(v.short) + ' <small>' + v.games.length + '</small></button>').join('') + '</div>';
+      if (venue) {
+        const courts = Array.from(venue.courts).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        const nums = courts.map((c) => c.replace(/^Court\s*/i, ''));
+        const courtText = !courts.length ? '' : courts.length === 1 ? courts[0] : (courts.every((c) => /^Court/i.test(c)) ? 'Courts ' + nums.slice(0, -1).join(', ') + ' and ' + nums[nums.length - 1] : courts.join(', '));
+        html += '<div class="venue-banner">' + pin + '<div><b>' + esc(venue.name) + '</b><span>' + venue.games.length + (venue.games.length === 1 ? ' ' + esc(CLUB) + ' game' : ' ' + esc(CLUB) + ' games') + (courtText ? ' · ' + esc(courtText) : '') + '</span></div>' +
+          '<a class="btn" href="' + mapsUrl(venue.games[0]) + '" target="_blank" rel="noopener">Directions</a></div>';
+      }
+      html += '</div>';
+    }
 
     if (live.length) html += '<section><h2 class="section-title">Live now</h2><div class="live-grid">' + live.map(liveCard).join('') + '</div></section>';
 
@@ -259,7 +288,7 @@
     }
 
     if (!upcoming.length) {
-      html += '<div class="notice"><h2>No ' + (ui.age === 'All' && ui.sex === 'All' ? esc(CLUB) : 'matching') + ' games in the next week</h2><a href="#/results">See the latest results</a></div>';
+      html += '<div class="notice"><h2>No ' + (ui.age === 'All' && ui.sex === 'All' && !venue ? esc(CLUB) : 'matching') + ' games in the next week</h2><a href="#/results">See the latest results</a></div>';
     } else {
       const byDay = new Map();
       upcoming.forEach((g) => { const k = dayKey(g.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(g); });
@@ -534,6 +563,8 @@
     else if (parts[0] === 'game') { nav = 'results'; html = pageGame(parseInt(parts[1], 10)); }
     else html = pageHome();
     app.innerHTML = html;
+    const onVenue = app.querySelector('.venue-chips .chip[aria-pressed="true"]:not([data-venue="All"])');
+    if (onVenue) onVenue.parentElement.scrollLeft = onVenue.offsetLeft - onVenue.parentElement.offsetLeft - 40;
     document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === nav));
     const title = parts[0] === 'game' ? 'Box score' : { home: 'Game day', results: 'Results', teams: 'Teams' }[nav];
     document.title = title + ' · ' + CFG.siteName;
@@ -546,6 +577,7 @@
     if (b.dataset.round != null) { location.hash = '#/results/' + b.dataset.round; return; }
     if (b.dataset.age != null) { ui.age = b.dataset.age; route(); return; }
     if (b.dataset.sex != null) { ui.sex = b.dataset.sex; route(); return; }
+    if (b.dataset.venue != null) { ui.venue = b.dataset.venue; route(); return; }
     if (b.dataset.star != null) {
       const id = parseInt(b.dataset.star, 10);
       const ids = myTeamIds();
