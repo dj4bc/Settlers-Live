@@ -838,7 +838,7 @@
       setShown(g, v);
       bump(e.mine ? 'us' : 'them', e.n);
       const shot = e.n === 3 ? 'a three' : e.n === 2 ? '2' : e.n === 1 ? 'a free throw' : e.n;
-      tick('<b>' + esc(e.who || (e.mine ? v.us.short : themShort(v))) + '</b> ' + (e.who && !e.mine ? '(' + esc(themShort(v)) + ') ' : '') + 'scores ' + shot + ' · ' + lineFor(e.after), true);
+      tick('<b>' + esc(e.who || (e.mine ? v.us.short : themShort(v))) + '</b> ' + (e.who && !e.mine && themShort(v) ? '(' + esc(themShort(v)) + ') ' : '') + 'scores ' + shot + ' · ' + lineFor(e.after), true);
       if (i < evs.length) st.q = setTimeout(step, reduceMotion() ? 700 : 1600);
     };
     step();
