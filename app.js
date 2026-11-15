@@ -732,24 +732,32 @@
     // A placeholder is a ladder spot ("1", "4") or the winner/loser of another final ("WSF1", "LSF2").
     const seedOf = (n) => (/^\d+$/.test(n) ? parseInt(n, 10) : null);
     const byAlias = new Map(finals.filter((g) => g.alias).map((g) => [g.alias.toUpperCase(), g]));
-    const resolve = (n) => {
+    // No guessing: a ladder spot is only named once every pool game is done. "Winner SF1" lists the two teams in that semi.
+    const ordinal = (k) => k + (k % 100 >= 11 && k % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][k % 10] || 'th');
+    const resolve = (n, g) => {
       const sd = seedOf(n);
-      if (sd) { const r = rows[sd - 1]; return { seed: sd, name: r ? r.name : 'Ladder ' + sd, real: false, proj: true }; }
+      if (sd) {
+        const r = rows[sd - 1];
+        if (!r || !poolDone) return { seed: sd, name: ordinal(sd) + ' on ladder', real: false, pending: true, early: !!r };
+        return { seed: sd, name: r.name, real: false, proj: true };
+      }
       const ref = /^([WL])(\w+\d+)$/i.exec(n);
       if (ref && byAlias.has(ref[2].toUpperCase())) {
         const src = byAlias.get(ref[2].toUpperCase()), won = ref[1].toUpperCase() === 'W';
         const label = (won ? 'Winner ' : 'Loser ') + src.alias.toUpperCase();
         if (src.status === 'final' && src.s1 != null && src.s1 !== src.s2) {
-          const s = resolve((src.s1 > src.s2) === won ? src.n1 : src.n2);
+          const s = resolve((src.s1 > src.s2) === won ? src.n1 : src.n2, src);
           return Object.assign({}, s, { from: label, proj: s.proj });
         }
-        const lead = src.status === 'live' && src.s1 !== src.s2 ? resolve((src.s1 > src.s2) === won ? src.n1 : src.n2) : null;
-        return { name: label, real: false, pending: true, hint: lead ? (won ? 'leading' : 'trailing') + ': ' + lead.name : '' };
+        const ta = resolve(src.n1, src), tb = resolve(src.n2, src);
+        const two = ta.pending || tb.pending ? '' : ta.name + ' or ' + tb.name;
+        const lead = src.status === 'live' && src.s1 !== src.s2 ? ((src.s1 > src.s2) === won ? ta : tb) : null;
+        return { name: label, real: false, pending: true, hint: two + (lead && !lead.pending ? ' (' + lead.name + ' ' + (won ? 'leading' : 'trailing') + ')' : '') };
       }
       const i = rows.findIndex((r) => r.name === n);
       return { seed: i >= 0 ? i + 1 : null, name: n, real: true };
     };
-    const items = finals.map((g) => ({ g, stage: stageName(g), a: resolve(g.n1), b: resolve(g.n2) }));
+    const items = finals.map((g) => ({ g, stage: stageName(g), a: resolve(g.n1, g), b: resolve(g.n2, g) }));
     // Teams in the first finals stage = finals spots, which puts the cut line on the ladder.
     const firstStage = items[0].stage;
     const firstSeeds = new Set();
@@ -765,7 +773,7 @@
     const side = (t, score, show) => {
       const sub = t.from && !t.pending ? t.from : t.hint || '';
       return '<div class="fn-t' + (mine(t) ? ' me' : '') + (t.pending ? ' pending' : '') + '"><span class="fn-seed">' + (t.seed || '') + '</span>' +
-        '<span class="fn-name"><span>' + esc(t.name) + '</span>' + (t.proj ? '<em class="fn-proj">' + (fx.poolDone && !t.from ? 'Locked' : 'Projected') + '</em>' : '') +
+        '<span class="fn-name"><span>' + esc(t.name) + '</span>' + (t.proj ? '<em class="fn-proj">' + 'Locked' + '</em>' : '') +
         (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="fn-score">' + (show ? esc(score) : '') + '</span></div>';
     };
     const html = fx.items.map(({ g, stage, a, b }) => {
@@ -779,8 +787,10 @@
         side(a, g.s1, show) + side(b, g.s2, show) + '</' + tag + '>';
     }).join('');
     const anyProj = fx.items.some((x) => x.a.proj || x.b.proj || x.a.pending || x.b.pending);
+    const anyEarly = fx.items.some((x) => x.a.early || x.b.early);
     return '<div class="finals-block"><h3>Finals</h3>' + html +
-      '<p class="fine">' + (anyProj ? (fx.poolDone ? 'Teams marked "Locked" are from the final ladder. ' : 'Projected teams come from the ladder as it stands now and can still change. ') +
+      '<p class="fine">' + (anyProj ? (fx.poolDone ? 'Teams marked "Locked" are from the final ladder. ' : '') +
+        (anyEarly && !fx.poolDone ? 'Ladder spots are named once all pool games are done. ' : '') +
         'BasketballConnect fills in the real names once each spot is decided. ' : '') + 'Tap a game with our team in it for the box score.</p></div>';
   }
 
