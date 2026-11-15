@@ -470,3 +470,6 @@ a.fn-game:hover { border-color: var(--blue); color: inherit; }
 .fs-banner.loss { background: color-mix(in srgb, var(--navy), #fff 16%); color: #fff; }
 @media (prefers-reduced-motion: reduce) { .fs-siren.go { animation: none; } .fs-banner { transition: none; } }
 :root { --fs-ink: var(--gold-ink); }
+/* Rounds with no completed games yet are greyed out (still tappable). */
+.tab.future { color: #9AA3B2; background: #F3F5F9; border-style: dashed; font-weight: 500; }
+.tab.future[aria-pressed="true"] { background: #8A94A6; border-color: #8A94A6; border-style: solid; color: #fff; }
