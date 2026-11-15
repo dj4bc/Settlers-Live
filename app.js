@@ -762,7 +762,7 @@
     const side = (t, score, show) => {
       const sub = t.from && !t.pending ? t.from : t.hint || '';
       return '<div class="fn-t' + (mine(t) ? ' me' : '') + (t.pending ? ' pending' : '') + '"><span class="fn-seed">' + (t.seed || '') + '</span>' +
-        '<span class="fn-name"><span>' + esc(t.name) + '</span>' + (t.proj ? '<em class="fn-proj">' + (fx.poolDone && !t.from ? 'Set' : 'Projected') + '</em>' : '') +
+        '<span class="fn-name"><span>' + esc(t.name) + '</span>' + (t.proj ? '<em class="fn-proj">' + (fx.poolDone && !t.from ? 'Locked' : 'Projected') + '</em>' : '') +
         (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="fn-score">' + (show ? esc(score) : '') + '</span></div>';
     };
     const html = fx.items.map(({ g, stage, a, b }) => {
@@ -774,9 +774,10 @@
         side(a, g.s1, show) + side(b, g.s2, show) +
         (g.venue && g.status !== 'final' ? '<div class="fn-v">' + esc([g.venue, g.court].filter(Boolean).join(' · ')) + '</div>' : '') + '</' + tag + '>';
     }).join('');
+    const anyProj = fx.items.some((x) => x.a.proj || x.b.proj || x.a.pending || x.b.pending);
     return '<div class="finals-block"><h3>Finals</h3>' + html +
-      '<p class="fine">' + (fx.poolDone ? 'Teams marked "Set" are from the final ladder.' : 'Projected teams come from the ladder as it stands now and can still change.') +
-      ' BasketballConnect fills in the real names once each spot is decided.</p></div>';
+      '<p class="fine">' + (anyProj ? (fx.poolDone ? 'Teams marked "Locked" are from the final ladder. ' : 'Projected teams come from the ladder as it stands now and can still change. ') +
+        'BasketballConnect fills in the real names once each spot is decided. ' : '') + 'Tap a game with our team in it for the box score.</p></div>';
   }
 
   async function hydrateStats() {
