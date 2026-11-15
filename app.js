@@ -769,11 +769,12 @@
     const html = fx.items.map(({ g, stage, a, b }) => {
       const show = g.status !== 'upcoming';
       const ours = DATA.games.find((x) => x.id === g.id);
-      const when = g.status === 'live' ? '<span class="fn-live">Live</span>' : g.status === 'final' ? 'Final' : esc(whenShort(g.start));
+      const where = [g.venue, g.court.replace(/^court\s*/i, 'Ct ')].filter(Boolean).join(' ');
+      const when = (g.status === 'live' ? '<span class="fn-live">Live</span>' : g.status === 'final' ? 'Final' : esc(whenShort(g.start))) +
+        (where && g.status !== 'final' ? ' · ' + esc(where) : '');
       const tag = ours ? 'a' : 'div';
       return '<' + tag + ' class="fn-game"' + (ours ? ' href="#/game/' + g.id + '"' : '') + '><div class="fn-h"><span>' + esc(stage) + (g.alias ? ' · ' + esc(g.alias) : '') + '</span><span>' + when + '</span></div>' +
-        side(a, g.s1, show) + side(b, g.s2, show) +
-        (g.venue && g.status !== 'final' ? '<div class="fn-v">' + esc([g.venue, g.court].filter(Boolean).join(' · ')) + '</div>' : '') + '</' + tag + '>';
+        side(a, g.s1, show) + side(b, g.s2, show) + '</' + tag + '>';
     }).join('');
     const anyProj = fx.items.some((x) => x.a.proj || x.b.proj || x.a.pending || x.b.pending);
     return '<div class="finals-block"><h3>Finals</h3>' + html +
