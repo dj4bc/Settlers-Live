@@ -1,25 +1,39 @@
-// Site settings. Update these when a new tournament or season starts.
-// To find the values: open the competition's BasketballConnect fixture page, open the
-// browser's developer tools (Network tab), and look for the
-// "round/matches?competitionId=" request.
+// Site settings. Add each new tournament to `events` below.
 window.CLUB_CONFIG = {
   siteName: 'Settlers Live',
   clubName: 'Barossa Settlers',
   clubShort: 'Settlers',          // how our teams are labelled, e.g. "Settlers 1 Green"
   orgName: 'Barossa Valley Basketball',
-  seasonLabel: 'Barossa Valley Junior Tournament 2026',
+  seasonLabel: '2026/27 season',
   statsLabel: 'tournament',       // heading on team pages: "Player stats · tournament"
   apiBase: 'https://api-basketball.squadi.com',
-  // Each competition: the numeric id used by the matches endpoint, a short label,
-  // and every Settlers team in it. Team names must match clubPattern.
-  competitions: [
+  orgKey: 'c5f5cbe6-a575-4514-a3a6-f37128456e37', // BVABA on BasketballConnect (for "official fixture" links)
+  // Every tournament the Settlers play in, one line each. The header switcher lists them.
+  // To add one: open its BasketballConnect fixture page and copy competitionUniqueKey from the
+  // link into `key`. `id` is the number in the "round/matches?competitionId=" request (or ask Claude).
+  // `start` and `end` are the first and last day (Adelaide time). `teamIds` is optional: leave it
+  // out and every team whose name matches clubPattern is picked up.
+  // The site opens on: a live event, else one on today, else one starting within 7 days,
+  // else the one that finished most recently.
+  events: [
     {
-      id: 3023, label: '', // Barossa Valley Junior Basketball Tournament 2026, 13 to 15 Nov
-      sourceUrl: 'https://registration.basketballconnect.com/livescoreSeasonFixture?organisationKey=c5f5cbe6-a575-4514-a3a6-f37128456e37&yearId=9&competitionUniqueKey=01c8fecd-0b0d-4bc3-adf2-cedc6092b39a&divisionId=All',
+      slug: 'murray-bridge-2026', name: 'Murray Bridge TFI Bullets Carnival', short: 'Murray Bridge Carnival',
+      start: '2026-10-02', end: '2026-10-05',
+      id: 2803, key: 'a0d1e374-4f1b-423c-b803-619b9f4fdc29'
+    },
+    {
+      slug: 'barossa-2026', name: 'Barossa Valley Junior Basketball Tournament 2026', short: 'Barossa Valley Tournament',
+      start: '2026-11-13', end: '2026-11-15',
+      id: 3023, key: '01c8fecd-0b0d-4bc3-adf2-cedc6092b39a',
       teamIds: [
         164662, 164663, 164664, 164665, 164666, 164667, 164668, 164669, 164670,
         164671, 164672, 164673, 164674, 164675, 164676, 164677, 164678
       ]
+    },
+    {
+      slug: 'adelaide-hills-2026', name: 'Adelaide Hills Tournament 2026', short: 'Adelaide Hills Tournament',
+      start: '2026-12-11', end: '2026-12-13',
+      id: 3016, key: 'c7d3157a-26af-46aa-9bc6-69902a7cbd61'
     }
   ],
   // A regular expression that matches our team names, such as "Barossa U14B1 Green",
