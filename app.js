@@ -83,6 +83,17 @@
     });
     return r;
   }
+  // Grand final winners and runners-up among our teams (a derby final gives one of each).
+  function eventMedals(ev) {
+    const m = { gold: [], silver: [] };
+    if (ev.data) ev.data.games.forEach((g) => {
+      if (g.round !== 'Grand Final' || g.status !== 'final' || g.bye || g.s1 == null || g.s2 == null || g.s1 === g.s2) return;
+      const [win, lose] = g.s1 > g.s2 ? [g.t1, g.t2] : [g.t2, g.t1];
+      if (win.ours) m.gold.push(win);
+      if (lose.ours) m.silver.push(lose);
+    });
+    return m;
+  }
   const inDays = (n) => n <= 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days';
   // Which event to open on: one picked in the link, a live one, one on today, one starting within
   // a week, else the one that finished most recently (so recent stats stay up between events).
@@ -133,6 +144,14 @@
       '<span class="es-d">' + esc([dateRange(EVENT), note].filter(Boolean).join(' · ')) + '</span></span><span class="es-car" aria-hidden="true">▾</span>';
     b.setAttribute('aria-label', 'Event: ' + EVENT.name + '. Change event');
   }
+  function medalsHtml(m) {
+    if (!m.gold.length && !m.silver.length) return '';
+    const names = (list) => list.slice().sort(teamSort).map((t) => esc(groupName(t) + ' ' + t.short)).join(', ');
+    return '<div class="ev-medals">' +
+      (m.gold.length ? '<div class="ev-medal"><span class="medal gold" aria-hidden="true">' + m.gold.length + '</span><div><b>' + m.gold.length + ' gold</b> <span>' + names(m.gold) + '</span></div></div>' : '') +
+      (m.silver.length ? '<div class="ev-medal"><span class="medal silver" aria-hidden="true">' + m.silver.length + '</span><div><b>' + m.silver.length + ' silver</b> <span>' + names(m.silver) + '</span></div></div>' : '') +
+      '</div>';
+  }
   function eventRow(ev) {
     const st = eventState(ev);
     const d = ev.start ? ymd(ev.start) : null;
@@ -142,6 +161,8 @@
     if (ev.error && !ev.data) bits.push('couldn\'t load');
     else if (!teams) bits.push(st === 'finished' ? 'no ' + CLUB + ' teams' : 'draw not out yet');
     else bits.push(teams + (teams === 1 ? ' team' : ' teams'));
+    const golds = eventMedals(ev).gold.length;
+    if (golds) bits.push(golds + ' gold');
     const right = st === 'live' ? '<span class="ev-live"><span class="es-dot"></span>Live</span>'
       : st === 'upcoming' ? esc(inDays(daysUntil(ev)))
       : (rec.w + rec.l) ? '<b class="ev-rec">' + rec.w + '–' + rec.l + '</b><small>W–L</small>' : '';
@@ -196,7 +217,7 @@
     } else if (st === 'finished') {
       const r = eventRecord(EVENT);
       html += '<div class="notice ev-done"><h2>' + esc(EVENT.short) + ' finished ' + esc(fDow.format(ymd(EVENT.end)) + ' ' + fDayMon.format(ymd(EVENT.end))) + '</h2>' +
-        ((r.w + r.l) ? '<p>' + esc(CLUB) + ' teams won ' + r.w + ' and lost ' + r.l + '.</p>' : '') + '<a href="#/results">See the results</a> · <a href="#/teams">Teams and player stats</a></div>';
+        ((r.w + r.l) ? '<p>' + esc(CLUB) + ' teams won ' + r.w + ' and lost ' + r.l + '.</p>' : '') + medalsHtml(eventMedals(EVENT)) + '<a href="#/results">See the results</a> · <a href="#/teams">Teams and player stats</a></div>';
       const next = nextEvent();
       if (next) html += '<button type="button" class="ev-next" data-event="' + esc(next.slug) + '"><span><span class="ev-k">Next event · ' + esc(inDays(daysUntil(next))) + '</span><span class="ev-nn">' + esc(next.name) + '</span><span class="ev-ns">' + esc(dateRange(next)) + '</span></span><span aria-hidden="true">→</span></button>';
     }
