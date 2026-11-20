@@ -11,7 +11,22 @@
   const TZ = CFG.timeZone;
   const STORE_MY_TEAM = 'settlers.myTeam';
 
-  let DATA = null;        // { games, teams, rounds, fetchedAt }
+  let DATA = null;        // the chosen event's { games, teams, rounds, fetchedAt }
+
+  /* ---------- events ---------- */
+  // Each event is one tournament (one or more BasketballConnect competitions). The site shows one at a time.
+  // A config without `events` (like the Lions site) is one event made of all its competitions.
+  const fixtureUrl = (key) => key && CFG.orgKey ? 'https://registration.basketballconnect.com/livescoreSeasonFixture?organisationKey=' + CFG.orgKey + '&yearId=' + (CFG.yearId || 9) + '&competitionUniqueKey=' + key + '&divisionId=All' : '';
+  const EVENTS = (CFG.events && CFG.events.length ? CFG.events : [{ slug: 'season', name: CFG.seasonLabel, comps: CFG.competitions }]).map((e, i) => ({
+    slug: e.slug || 'event-' + i,
+    name: e.name || CFG.seasonLabel || '',
+    short: e.short || e.name || CFG.seasonLabel || '',
+    start: e.start || '', end: e.end || e.start || '',
+    comps: (e.comps || [e]).map((c) => ({ id: c.id, key: c.key || '', label: c.label || '', teamIds: c.teamIds || null, sourceUrl: c.sourceUrl || fixtureUrl(c.key) })),
+    data: null, error: null
+  }));
+  const MULTI = EVENTS.length > 1;
+  let EVENT = null;
   let refreshTimer = null;
   const ui = { age: 'All', sex: 'All', venue: 'All', round: null };
 
@@ -40,17 +55,168 @@
   const whenShort = (d) => (dayKey(d) === todayKey() ? 'Today ' : fWeekday.format(d) + ' ') + time(d);
   const isOurs = (name) => !!name && CLUB_RE.test(name);
 
+  // Event dates are plain "YYYY-MM-DD" days in Adelaide time.
+  const ymd = (k) => new Date(k + 'T12:00:00Z');
+  const fUtc = (o) => new Intl.DateTimeFormat('en-AU', Object.assign({ timeZone: 'UTC' }, o));
+  const fMon = fUtc({ month: 'short' }), fDnum = fUtc({ day: 'numeric' }), fDow = fUtc({ weekday: 'short' }), fDayMon = fUtc({ day: 'numeric', month: 'short' });
+  function dateRange(ev) {
+    if (!ev.start) return '';
+    const a = ymd(ev.start), b = ymd(ev.end);
+    if (ev.start === ev.end) return fDow.format(a) + ' ' + fDayMon.format(a);
+    return fMon.format(a) === fMon.format(b) ? fDnum.format(a) + '–' + fDayMon.format(b) : fDayMon.format(a) + ' – ' + fDayMon.format(b);
+  }
+  const daysUntil = (ev) => Math.round((ymd(ev.start) - ymd(todayKey())) / 864e5);
+  const liveCount = (ev) => ev.data ? ev.data.games.filter((g) => g.status === 'live').length : 0;
+  function eventState(ev) {
+    if (liveCount(ev)) return 'live';
+    const today = todayKey();
+    if (ev.start && today < ev.start) return 'upcoming';
+    if (ev.end && today > ev.end) return 'finished';
+    return 'on';
+  }
+  function eventRecord(ev) {
+    const r = { w: 0, l: 0 };
+    if (ev.data) ev.data.games.forEach((g) => {
+      if (g.status !== 'final' || g.bye || g.s1 == null || g.s2 == null) return;
+      if (g.t1.ours) { if (g.s1 > g.s2) r.w++; else if (g.s1 < g.s2) r.l++; }
+      if (g.t2.ours) { if (g.s2 > g.s1) r.w++; else if (g.s2 < g.s1) r.l++; }
+    });
+    return r;
+  }
+  const inDays = (n) => n <= 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days';
+  // Which event to open on: one picked in the link, a live one, one on today, one starting within
+  // a week, else the one that finished most recently (so recent stats stay up between events).
+  function pickEvent() {
+    const want = new URLSearchParams(location.search).get('e');
+    const byLink = EVENTS.find((e) => e.slug === want);
+    if (byLink) return byLink;
+    const live = EVENTS.filter((e) => eventState(e) === 'live').sort((a, b) => liveCount(b) - liveCount(a));
+    if (live.length) return live[0];
+    const on = EVENTS.find((e) => eventState(e) === 'on');
+    if (on) return on;
+    const next = nextEvent();
+    if (next && daysUntil(next) <= 7) return next;
+    const last = EVENTS.filter((e) => eventState(e) === 'finished').sort((a, b) => b.end.localeCompare(a.end))[0];
+    return last || next || EVENTS[0];
+  }
+  function nextEvent() { return EVENTS.filter((e) => eventState(e) === 'upcoming').sort((a, b) => a.start.localeCompare(b.start))[0] || null; }
+  function setEvent(ev, fromUser) {
+    if (!ev) return;
+    if (ev !== EVENT) { ui.venue = 'All'; ui.round = null; }
+    EVENT = ev;
+    DATA = ev.data;
+    if (fromUser) {
+      try { const u = new URL(location.href); u.searchParams.set('e', ev.slug); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* fine */ }
+    }
+    renderEventSwitch();
+  }
+  // A link to a team or game in another event switches to that event.
+  function eventForHash() {
+    const parts = (location.hash || '').replace(/^#/, '').split('/').filter(Boolean);
+    const id = parseInt(parts[1], 10);
+    const has = (ev) => ev.data && (parts[0] === 'team' ? ev.data.teams.has(id) : ev.data.games.some((g) => g.id === id));
+    if ((parts[0] !== 'team' && parts[0] !== 'game') || isNaN(id) || (EVENT && has(EVENT))) return;
+    const ev = EVENTS.find(has);
+    if (ev) setEvent(ev, false);
+  }
+  function renderEventSwitch() {
+    const sub = document.getElementById('season-label');
+    const src = document.getElementById('source-link');
+    if (src && EVENT && EVENT.comps[0].sourceUrl) src.href = EVENT.comps[0].sourceUrl;
+    if (sub) sub.textContent = MULTI ? CFG.clubName + ' Basketball' : CFG.clubName + ' · ' + (EVENT ? EVENT.name : CFG.seasonLabel);
+    const b = document.getElementById('event-switch');
+    if (!b || !MULTI || !EVENT) return;
+    const st = eventState(EVENT);
+    const note = st === 'live' ? 'Live now' : st === 'on' ? 'On now' : st === 'upcoming' ? 'Starts ' + inDays(daysUntil(EVENT)) : 'Finished';
+    b.hidden = false;
+    b.innerHTML = '<span class="es-text"><span class="es-k">' + (st === 'live' ? '<span class="es-dot"></span>' : '') + 'Event</span><span class="es-n">' + esc(EVENT.short) + '</span>' +
+      '<span class="es-d">' + esc([dateRange(EVENT), note].filter(Boolean).join(' · ')) + '</span></span><span class="es-car" aria-hidden="true">▾</span>';
+    b.setAttribute('aria-label', 'Event: ' + EVENT.name + '. Change event');
+  }
+  function eventRow(ev) {
+    const st = eventState(ev);
+    const d = ev.start ? ymd(ev.start) : null;
+    const teams = ev.data ? ev.data.teams.size : 0;
+    const rec = eventRecord(ev);
+    const bits = [dateRange(ev)];
+    if (ev.error && !ev.data) bits.push('couldn\'t load');
+    else if (!teams) bits.push(st === 'finished' ? 'no ' + CLUB + ' teams' : 'draw not out yet');
+    else bits.push(teams + (teams === 1 ? ' team' : ' teams'));
+    const right = st === 'live' ? '<span class="ev-live"><span class="es-dot"></span>Live</span>'
+      : st === 'upcoming' ? esc(inDays(daysUntil(ev)))
+      : (rec.w + rec.l) ? '<b class="ev-rec">' + rec.w + '–' + rec.l + '</b><small>W–L</small>' : '';
+    return '<button type="button" class="ev-row' + (ev === EVENT ? ' sel' : '') + (st === 'finished' && !teams ? ' dim' : '') + '" data-event="' + esc(ev.slug) + '"' + (ev === EVENT ? ' aria-current="true"' : '') + '>' +
+      (d ? '<span class="cal"><span>' + esc(fMon.format(d).toUpperCase()) + '</span><b>' + esc(fDnum.format(d)) + '</b></span>' : '') +
+      '<span class="ev-main"><span class="ev-name">' + esc(ev.name) + '</span><span class="ev-sub">' + esc(bits.filter(Boolean).join(' · ')) + '</span></span>' +
+      '<span class="ev-right">' + right + (ev === EVENT ? '<small>Showing</small>' : '') + '</span></button>';
+  }
+  function openEventSheet() {
+    closeEventSheet();
+    const groups = [
+      ['Live now', EVENTS.filter((e) => ['live', 'on'].includes(eventState(e)))],
+      ['Coming up', EVENTS.filter((e) => eventState(e) === 'upcoming').sort((a, b) => a.start.localeCompare(b.start))],
+      ['Finished', EVENTS.filter((e) => eventState(e) === 'finished').sort((a, b) => b.end.localeCompare(a.end))]
+    ].filter((g) => g[1].length);
+    const w = document.createElement('div');
+    w.className = 'ev-sheet-wrap';
+    w.innerHTML = '<div class="a2hs-sheet-bg" data-ev-close></div><div class="ev-sheet" role="dialog" aria-modal="true" aria-labelledby="ev-sheet-t"><span class="a2hs-grab" aria-hidden="true"></span>' +
+      '<div class="ev-sheet-hd"><h2 id="ev-sheet-t">Choose an event</h2><button type="button" class="ev-x" data-ev-close aria-label="Close">✕</button></div>' +
+      groups.map((g) => '<div class="ev-grp">' + g[0] + '</div>' + g[1].map(eventRow).join('')).join('') + '</div>';
+    document.body.appendChild(w);
+    const sel = w.querySelector('.ev-row.sel') || w.querySelector('.ev-row');
+    if (sel) sel.focus();
+  }
+  function closeEventSheet() { const w = document.querySelector('.ev-sheet-wrap'); if (w) { w.remove(); return true; } return false; }
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#event-switch')) { openEventSheet(); return; }
+    if (e.target.closest('[data-ev-close]')) { closeEventSheet(); return; }
+    const r = e.target.closest('[data-event]');
+    if (!r) return;
+    const ev = EVENTS.find((x) => x.slug === r.dataset.event);
+    closeEventSheet();
+    if (!ev) return;
+    setEvent(ev, true);
+    const h = (location.hash || '#/').replace(/^#/, '').split('/').filter(Boolean)[0];
+    const keep = h === 'results' ? '#/results' : h === 'teams' || h === 'team' ? '#/teams' : '#/';
+    if (location.hash !== keep && !(keep === '#/' && !location.hash)) location.hash = keep; else { route(); window.scrollTo(0, 0); }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEventSheet(); });
+  // Game day cards for the event as a whole: countdown, finished summary, the next event, other live events.
+  function eventCards() {
+    if (!MULTI || !EVENT) return '';
+    const st = eventState(EVENT);
+    let html = '';
+    const others = EVENTS.filter((e) => e !== EVENT && eventState(e) === 'live');
+    if (others.length) html += '<div class="ev-also"><span class="es-dot"></span>Also live: ' + others.map((e) => '<button type="button" class="linkish" data-event="' + esc(e.slug) + '">' + esc(e.short) + '</button>').join(', ') + '</div>';
+    if (st === 'upcoming') {
+      const n = daysUntil(EVENT), teams = DATA ? Array.from(DATA.teams.values()).sort(teamSort) : [];
+      html += '<div class="ev-hero"><div><div class="ev-k">' + (n <= 1 ? 'Starts ' + inDays(n) : 'Next event') + '</div><div class="ev-hn">' + esc(EVENT.name) + '</div>' +
+        '<div class="ev-hs">' + esc(dateRange(EVENT)) + (teams.length ? ' · ' + teams.length + ' ' + esc(CLUB) + (teams.length === 1 ? ' team' : ' teams') : ' · draw not out yet') + '</div></div>' +
+        (n > 1 ? '<div class="ev-count"><b>' + n + '</b><span>days</span></div>' : '') + '</div>';
+    } else if (st === 'finished') {
+      const r = eventRecord(EVENT);
+      html += '<div class="notice ev-done"><h2>' + esc(EVENT.short) + ' finished ' + esc(fDow.format(ymd(EVENT.end)) + ' ' + fDayMon.format(ymd(EVENT.end))) + '</h2>' +
+        ((r.w + r.l) ? '<p>' + esc(CLUB) + ' teams won ' + r.w + ' and lost ' + r.l + '.</p>' : '') + '<a href="#/results">See the results</a> · <a href="#/teams">Teams and player stats</a></div>';
+      const next = nextEvent();
+      if (next) html += '<button type="button" class="ev-next" data-event="' + esc(next.slug) + '"><span><span class="ev-k">Next event · ' + esc(inDays(daysUntil(next))) + '</span><span class="ev-nn">' + esc(next.name) + '</span><span class="ev-ns">' + esc(dateRange(next)) + '</span></span><span aria-hidden="true">→</span></button>';
+    }
+    return html;
+  }
+
   // Team names look like "Barossa U14B1 Green", "LABA U16B2", "U18B2 - Barossa Valley"
   // or "U16B Central Districts Lions 4". Find the age/sex token wherever it is.
   function parseTeam(t) {
     if (!t || !t.name || /^bye$/i.test(t.name.trim())) return null;
     const nm = t.name.trim().replace(/\s+/g, ' ');
-    const m = nm.match(/(?:^|\s)(U\d+|S|R)([BGMW])(\d*)(?=\s|$)/);
+    const m = nm.match(/(?:^|\s)(U\d+|S|R)([BGMW])(D?)(\d*)(?=[\s-]|$)/);
     let rest = m ? (nm.slice(0, m.index) + ' ' + nm.slice(m.index + m[0].length)) : nm;
     rest = rest.replace(/\s+-\s+|^\s*-\s*|\s*-\s*$/g, ' ').replace(/\s+/g, ' ').trim();
     const ours = isOurs(nm);
-    const num = (m && m[3]) || (rest.match(/\s(\d+)$/) || [])[1] || '';
-    if (num && !(m && m[3])) rest = rest.replace(/\s\d+$/, '');
+    // "U14BD2" is a division number, not a team number: keep it for our teams only.
+    const divNum = !!(m && m[3]);
+    let num = (m && m[4]) || (rest.match(/\s(\d+)$/) || [])[1] || '';
+    if (num && !(m && m[4])) rest = rest.replace(/\s\d+$/, '');
+    if (divNum && !ours) num = '';
     const colour = ((ours ? rest : '').match(COLOUR_RE) || [])[1] || '';
     const age = m ? (m[1] === 'S' ? 'Senior' : m[1] === 'R' ? 'Reserves' : m[1]) : '';
     return {
@@ -233,7 +399,8 @@
   function pageHome() {
     const now = Date.now();
     const ages = Array.from(new Set(Array.from(DATA.teams.values()).map((t) => t.age))).sort((a, b) => ageNum(a) - ageNum(b));
-    const horizon = now + 8 * 864e5;
+    const evState = MULTI && EVENT ? eventState(EVENT) : 'on';
+    const horizon = evState === 'upcoming' ? Infinity : now + 8 * 864e5;
     const inWindow = (g) => !g.bye && (g.status === 'live' ||
       (g.status === 'upcoming' && !g.postponed && g.start.getTime() > now - 3 * 3600e3 && g.start.getTime() < horizon) ||
       (g.status === 'final' && g.start.getTime() > now - 2 * 864e5));
@@ -253,7 +420,7 @@
     const live = games.filter((g) => g.status === 'live' || justDone(g));
     const upcoming = games.filter((g) => g.status === 'upcoming');
     const recent = games.filter((g) => g.status === 'final' && !justDone(g)).reverse();
-    let html = '';
+    let html = eventCards();
 
     const mine = myTeamIds().filter((id) => DATA.teams.has(id)).map((id) => DATA.teams.get(id)).sort(teamSort);
     if (mine.length) {
@@ -268,7 +435,7 @@
     }
 
     html += '<div class="page-head"><div><div class="eyebrow">' + esc(fLongDay.format(new Date())) + '</div><h1 class="page-title">Game day</h1>' +
-      '<div class="page-sub">' + (live.length ? live.length + ' live · ' : '') + upcoming.length + (upcoming.length === 1 ? ' ' + CLUB + ' game' : ' ' + CLUB + ' games') + (venue ? ' at ' + esc(venue.name) : '') + ' in the next week</div></div></div>' + filterChips(ages);
+      '<div class="page-sub">' + (live.length ? live.length + ' live · ' : '') + upcoming.length + (upcoming.length === 1 ? ' ' + CLUB + ' game' : ' ' + CLUB + ' games') + (venue ? ' at ' + esc(venue.name) : '') + (evState === 'upcoming' ? '' : ' in the next week') + '</div></div></div>' + filterChips(ages);
 
     if (venues.length > 1 || venue) {
       html += '<div class="venue-filter"><div class="venue-label">Venue</div><div class="venue-chips" role="group" aria-label="Filter by venue">' +
@@ -291,7 +458,9 @@
         (recent.length > 8 ? '<p><a href="#/results">See all results</a></p>' : '') + '</section>';
     }
 
-    if (!upcoming.length) {
+    if (!upcoming.length && evState === 'finished') {
+      // the finished card above already says so
+    } else if (!upcoming.length) {
       html += '<div class="notice"><h2>No ' + (ui.age === 'All' && ui.sex === 'All' && !venue ? esc(CLUB) : 'matching') + ' games in the next week</h2><a href="#/results">See the latest results</a></div>';
     } else {
       const byDay = new Map();
@@ -393,7 +562,7 @@
     const groups = new Map();
     teams.forEach((t) => { const k = groupName(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); });
     const mine = myTeamIds();
-    let html = '<div class="page-head"><div><div class="eyebrow">' + esc(CFG.seasonLabel) + '</div><h1 class="page-title">Teams</h1><div class="page-sub">' + allTeams.length + ' ' + esc(CLUB) + ' teams. Tap a team, then star it to pin it to Game day.</div></div></div>' + filterChips(ages) + (teams.length ? '' : '<div class="notice">No teams match these filters.</div>') + '<section class="grid">';
+    let html = '<div class="page-head"><div><div class="eyebrow">' + esc(EVENT ? EVENT.short : CFG.seasonLabel) + '</div><h1 class="page-title">Teams</h1><div class="page-sub">' + allTeams.length + ' ' + esc(CLUB) + ' teams. Tap a team, then star it to pin it to Game day.</div></div></div>' + filterChips(ages) + (teams.length ? '' : '<div class="notice">No teams match these filters.</div>') + '<section class="grid">';
     groups.forEach((list, name) => {
       html += '<article class="card"><div class="card-head"><h2>' + esc(name) + '</h2><span class="meta">' + list.length + ' teams</span></div>' +
         list.map((t) => {
@@ -860,8 +1029,8 @@
 
   // BasketballConnect's own match centre (action log, fouls). It's public to view, but its data feed is only for their site, so we link to it.
   function matchCentreUrl(g) {
-    const m = /competitionUniqueKey=([\w-]+)/.exec((g.comp && g.comp.sourceUrl) || '');
-    return m ? 'https://registration.basketballconnect.com/matchSummary?matchId=' + g.id + '&competitionId=' + g.comp.id + '&competitionUniqueKey=' + m[1] : '';
+    const k = g.comp ? compKey(g.comp) : '';
+    return k ? 'https://registration.basketballconnect.com/matchSummary?matchId=' + g.id + '&competitionId=' + g.comp.id + '&competitionUniqueKey=' + k : '';
   }
 
   // Player rows built from the scraper's action-log file, used while BasketballConnect's stats feed is still empty.
@@ -1309,7 +1478,13 @@
   const HYDRATED = '[data-tick], [data-lw], [data-fouls], [data-flow], [data-worm], [data-game-stats], [data-ladder], [data-team-stats]';
   const hydKey = (el) => ['tick', 'lw', 'fouls', 'flow', 'worm', 'gameStats', 'ladder', 'teamStats'].map((a) => el.dataset[a] != null ? a + el.dataset[a] : '').join('');
   function route() {
-    if (!DATA) return;
+    if (!EVENT) return;
+    eventForHash();
+    if (!DATA) {
+      app.innerHTML = '<div class="notice"><h2>Couldn\'t load ' + esc(EVENT.short) + '</h2><p>BasketballConnect didn\'t respond' + (EVENT.error ? ' (' + esc(EVENT.error.message) + ')' : '') + '. Try again in a minute, or <button type="button" class="linkish" id="ev-pick">pick another event</button>.</p></div>';
+      const b = document.getElementById('ev-pick'); if (b) b.onclick = openEventSheet;
+      return;
+    }
     const h = (location.hash || '#/').replace(/^#/, '');
     const parts = h.split('/').filter(Boolean);
     let html, nav = 'home';
@@ -1380,54 +1555,67 @@
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
 
   /* ---------- data ---------- */
-  function dataUrl(comp, i) {
+  function dataUrl(comp) {
     const mock = new URLSearchParams(location.search).get('mock');
-    if (mock && /^[\w.-]+\.json$/.test(mock)) return i === 0 ? mock : mock.replace(/\.json$/, '-' + comp.id + '.json');
+    if (mock && /^[\w.-]+\.json$/.test(mock)) return mock.replace(/\.json$/, '-' + comp.id + '.json');
     return CFG.apiBase + '/livescores/round/matches?competitionId=' + comp.id +
-      '&divisionId=&teamIds=[' + comp.teamIds.join(',') + ']&ignoreStatuses=[1]';
+      '&divisionId=&teamIds=' + (comp.teamIds && comp.teamIds.length ? '[' + comp.teamIds.join(',') + ']' : '') + '&ignoreStatuses=[1]';
   }
-  // Every competition loads in parallel. One that fails is skipped, unless they all fail.
-  async function fetchAll() {
-    const results = await Promise.allSettled(CFG.competitions.map(async (comp, i) => {
-      const res = await fetch(dataUrl(comp, i), { cache: 'no-store' });
+  // An event's competitions load in parallel. One that fails is skipped, unless they all fail.
+  async function fetchEvent(ev) {
+    const results = await Promise.allSettled(ev.comps.map(async (comp) => {
+      const res = await fetch(dataUrl(comp), { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return { comp, json: await res.json() };
     }));
     const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
     if (!ok.length) throw results[0].reason;
-    return ok;
+    return normalise(ok);
   }
+  // Refreshes reload the event on screen and any event on around today; the rest load once.
+  const nearToday = (ev) => {
+    if (!ev.start) return true;
+    const t = ymd(todayKey()).getTime();
+    return t >= ymd(ev.start).getTime() - 864e5 && t <= ymd(ev.end).getTime() + 864e5;
+  };
 
   async function load(silent) {
-    try {
-      const wasLive = new Set(DATA ? DATA.games.filter((g) => g.status === 'live').map((g) => g.id) : []);
-      DATA = normalise(await fetchAll());
-      DATA.games.forEach((g) => { if (wasLive.has(g.id) && g.status === 'final' && !justFinal.has(g.id)) { justFinal.set(g.id, Date.now()); sirenQueue.add(g.id); } });
+    const first = !EVENTS.some((e) => e.data);
+    const targets = first ? EVENTS : EVENTS.filter((e) => e === EVENT || nearToday(e) || liveCount(e));
+    const wasLive = new Set();
+    EVENTS.forEach((e) => { if (e.data) e.data.games.forEach((g) => { if (g.status === 'live') wasLive.add(g.id); }); });
+    await Promise.all(targets.map(async (ev) => {
+      try { ev.data = await fetchEvent(ev); ev.error = null; } catch (err) { ev.error = err; }
+    }));
+    if (!EVENTS.some((e) => e.data)) {
+      const err = targets[0].error || new Error('no data');
+      app.innerHTML = '<div class="notice"><h2>Couldn\'t load the latest games</h2><p>BasketballConnect didn\'t respond (' + esc(err.message) + '). Try again in a minute, or check the <a href="' + esc(EVENTS[0].comps[0].sourceUrl) + '" target="_blank" rel="noopener">official fixture</a>.</p><button class="chip" type="button" onclick="location.reload()">Try again</button></div>';
+    } else {
+      setEvent(first ? pickEvent() : EVENT, false);
+      eventForHash();
+      targets.forEach((ev) => { if (ev.data) ev.data.games.forEach((g) => { if (wasLive.has(g.id) && g.status === 'final' && !justFinal.has(g.id)) { justFinal.set(g.id, Date.now()); sirenQueue.add(g.id); } }); });
       // Opened by tapping a full-time alert: play the siren for that game once, as if you had watched it finish.
-      if (fromAlert) {
+      if (fromAlert && DATA) {
         fromAlert = false;
         const m = (location.hash || '').match(/^#\/game\/(\d+)/);
         const g = m && DATA.games.find((x) => x.id === parseInt(m[1], 10));
         if (g && g.status === 'final' && Date.now() - g.start.getTime() < 5 * 3600e3) { justFinal.set(g.id, Date.now()); sirenQueue.add(g.id); }
         try { const u = new URL(location.href); u.searchParams.delete('from'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* fine */ }
       }
-      document.getElementById('updated').textContent = 'Updated ' + time(DATA.fetchedAt);
+      const at = (DATA || EVENTS.find((e) => e.data).data).fetchedAt;
+      document.getElementById('updated').textContent = 'Updated ' + time(at);
       const y = window.scrollY;
       route();
       if (silent) window.scrollTo(0, y);
-    } catch (err) {
-      if (!DATA) {
-        app.innerHTML = '<div class="notice"><h2>Couldn\'t load the latest games</h2><p>BasketballConnect didn\'t respond (' + esc(err.message) + '). Try again in a minute, or check the <a href="' + esc(CFG.competitions[0].sourceUrl) + '" target="_blank" rel="noopener">official fixture</a>.</p><button class="chip" type="button" onclick="location.reload()">Try again</button></div>';
-      }
     }
     clearTimeout(refreshTimer);
-    const anyLive = DATA && DATA.games.some((g) => g.status === 'live');
-    const soon = DATA && DATA.games.some((g) => g.status === 'upcoming' && !g.postponed && Math.abs(g.start - Date.now()) < 3600e3);
+    const games = [].concat(...EVENTS.filter((e) => e.data).map((e) => e.data.games));
+    const anyLive = games.some((g) => g.status === 'live');
+    const soon = games.some((g) => g.status === 'upcoming' && !g.postponed && Math.abs(g.start - Date.now()) < 3600e3);
     refreshTimer = setTimeout(() => { if (!document.hidden) load(true); else refreshTimer = null; }, anyLive || soon ? CFG.liveRefreshMs : 10 * 60e3);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !refreshTimer) load(true); });
 
-  document.getElementById('season-label').textContent = CFG.clubName + ' · ' + CFG.seasonLabel;
-  document.getElementById('source-link').href = CFG.competitions[0].sourceUrl;
+  renderEventSwitch();
   load(false);
 })();
