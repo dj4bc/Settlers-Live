@@ -83,6 +83,17 @@
     });
     return r;
   }
+  // Grand final winners and runners-up among our teams (a derby final gives one of each).
+  function eventMedals(ev) {
+    const m = { gold: [], silver: [] };
+    if (ev.data) ev.data.games.forEach((g) => {
+      if (g.round !== 'Grand Final' || g.status !== 'final' || g.bye || g.s1 == null || g.s2 == null || g.s1 === g.s2) return;
+      const [win, lose] = g.s1 > g.s2 ? [g.t1, g.t2] : [g.t2, g.t1];
+      if (win.ours) m.gold.push(win);
+      if (lose.ours) m.silver.push(lose);
+    });
+    return m;
+  }
   const inDays = (n) => n <= 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days';
   // Which event to open on: one picked in the link, a live one, one on today, one starting within
   // a week, else the one that finished most recently (so recent stats stay up between events).
@@ -133,6 +144,14 @@
       '<span class="es-d">' + esc([dateRange(EVENT), note].filter(Boolean).join(' · ')) + '</span></span><span class="es-car" aria-hidden="true">▾</span>';
     b.setAttribute('aria-label', 'Event: ' + EVENT.name + '. Change event');
   }
+  function medalsHtml(m) {
+    if (!m.gold.length && !m.silver.length) return '';
+    const names = (list) => list.slice().sort(teamSort).map((t) => esc(groupName(t) + ' ' + t.short)).join(', ');
+    return '<div class="ev-medals">' +
+      (m.gold.length ? '<div class="ev-medal"><span class="medal gold" aria-hidden="true">' + m.gold.length + '</span><div><b>' + m.gold.length + ' gold</b> <span>' + names(m.gold) + '</span></div></div>' : '') +
+      (m.silver.length ? '<div class="ev-medal"><span class="medal silver" aria-hidden="true">' + m.silver.length + '</span><div><b>' + m.silver.length + ' silver</b> <span>' + names(m.silver) + '</span></div></div>' : '') +
+      '</div>';
+  }
   function eventRow(ev) {
     const st = eventState(ev);
     const d = ev.start ? ymd(ev.start) : null;
@@ -142,6 +161,8 @@
     if (ev.error && !ev.data) bits.push('couldn\'t load');
     else if (!teams) bits.push(st === 'finished' ? 'no ' + CLUB + ' teams' : 'draw not out yet');
     else bits.push(teams + (teams === 1 ? ' team' : ' teams'));
+    const golds = eventMedals(ev).gold.length;
+    if (golds) bits.push(golds + ' gold');
     const right = st === 'live' ? '<span class="ev-live"><span class="es-dot"></span>Live</span>'
       : st === 'upcoming' ? esc(inDays(daysUntil(ev)))
       : (rec.w + rec.l) ? '<b class="ev-rec">' + rec.w + '–' + rec.l + '</b><small>W–L</small>' : '';
@@ -196,7 +217,7 @@
     } else if (st === 'finished') {
       const r = eventRecord(EVENT);
       html += '<div class="notice ev-done"><h2>' + esc(EVENT.short) + ' finished ' + esc(fDow.format(ymd(EVENT.end)) + ' ' + fDayMon.format(ymd(EVENT.end))) + '</h2>' +
-        ((r.w + r.l) ? '<p>' + esc(CLUB) + ' teams won ' + r.w + ' and lost ' + r.l + '.</p>' : '') + '<a href="#/results">See the results</a> · <a href="#/teams">Teams and player stats</a></div>';
+        ((r.w + r.l) ? '<p>' + esc(CLUB) + ' teams won ' + r.w + ' and lost ' + r.l + '.</p>' : '') + medalsHtml(eventMedals(EVENT)) + '<a href="#/results">See the results</a> · <a href="#/teams">Teams and player stats</a></div>';
       const next = nextEvent();
       if (next) html += '<button type="button" class="ev-next" data-event="' + esc(next.slug) + '"><span><span class="ev-k">Next event · ' + esc(inDays(daysUntil(next))) + '</span><span class="ev-nn">' + esc(next.name) + '</span><span class="ev-ns">' + esc(dateRange(next)) + '</span></span><span aria-hidden="true">→</span></button>';
     }
@@ -253,6 +274,21 @@
   }
 
   // Rounds in a tournament mix "Round 3" with finals names. Short labels for tabs and tiles.
+  // BasketballConnect names finals rounds differently in each tournament: "SF" and "GF",
+  // "Semi Final", or "Finals - Round 1" with the real stage only in the game's finals alias
+  // ("SF1", "GF1"). Work out the real stage so tabs and labels say Semi final / Grand final.
+  const STAGE_RANK = { 'Quarter Final': 1, 'Elimination Final': 1, 'Crossover': 2, 'Semi Final': 3, 'Preliminary Final': 4, 'Grand Final': 5 };
+  function stageOf(name, alias) {
+    const n = String(name || '').trim(), a = String(alias || '').trim().toUpperCase();
+    if (/^GF/.test(a) || /^GF$|grand/i.test(n)) return 'Grand Final';
+    if (/^PF/.test(a) || /^PF$|prelim/i.test(n)) return 'Preliminary Final';
+    if (/^SF/.test(a) || /^SF$|semi/i.test(n)) return 'Semi Final';
+    if (/^QF/.test(a) || /^QF$|quarter/i.test(n)) return 'Quarter Final';
+    if (/^EF/.test(a) || /^EF$|elim/i.test(n)) return 'Elimination Final';
+    if (/cross/i.test(n)) return 'Crossover';
+    return n;
+  }
+
   function roundShort(name) {
     const n = String(name || '');
     if (/grand final/i.test(n)) return 'GF';
@@ -260,6 +296,7 @@
     if (/semi/i.test(n)) return 'SF';
     if (/cross/i.test(n)) return 'XO';
     if (/quarter/i.test(n)) return 'QF';
+    if (/elim/i.test(n)) return 'EF';
     if (/final/i.test(n)) return 'F' + ((n.match(/\d+/) || [''])[0]);
     return 'R' + ((n.match(/\d+/) || ['–'])[0]);
   }
@@ -275,7 +312,8 @@
         const vc = m.venueCourt || {}, v = vc.venue || {};
         games.push({
           id: m.id,
-          round: rd.name || ('Round ' + ((rd.sequence || 0) + 1)),
+          round: stageOf(rd.name || ('Round ' + ((rd.sequence || 0) + 1)), m.finalsAlias),
+          roundRaw: rd.name || '',
           roundSeq: rd.sequence != null ? rd.sequence : 0,
           division: (rd.division && rd.division.name) || '',
           divisionShort: [comp.label, shortDivision(rd.division && rd.division.name)].filter(Boolean).join(' · '),
@@ -312,7 +350,9 @@
       r.first = r.games[0].start; r.last = r.games[r.games.length - 1].start;
       r.finals = r.games.filter((g) => g.status === 'final').length;
       const isFin = r.games.some((g) => g.finals) || !/^round\s*\d+$/i.test(r.name);
-      r.order = (isFin ? 1e15 : 0) + r.first.getTime();
+      // Pool rounds by date, then finals by stage (semis before the grand final), then date.
+      const rn = parseInt((r.name.match(/^round\s*(\d+)/i) || [])[1], 10) || 0;
+      r.order = (isFin ? 1e15 + (STAGE_RANK[r.name] || 0) * 1e13 : rn * 1e13) + r.first.getTime();
     });
     rounds.sort((a, b) => a.order - b.order);
     rounds.forEach((r, i) => { r.seq = i; });
@@ -874,7 +914,7 @@
     (json.rounds || []).forEach((rd) => (rd.matches || []).forEach((m) => {
       if (m.divisionId && m.divisionId !== divId) return;
       const st = (m.matchStatus || '').toUpperCase();
-      games.push({ id: m.id, round: rd.name || '', finals: !!m.isFinals || !!m.finalsAlias, alias: m.finalsAlias || '',
+      games.push({ id: m.id, round: stageOf(rd.name, m.finalsAlias), finals: !!m.isFinals || !!m.finalsAlias, alias: m.finalsAlias || '',
         start: new Date(m.startTime), n1: ((m.team1 && m.team1.name) || '').trim(), n2: ((m.team2 && m.team2.name) || '').trim(),
         s1: m.team1Score, s2: m.team2Score, status: st === 'ENDED' ? 'final' : (st && !/POSTPONED|CANCEL|ABANDON/.test(st) ? 'live' : 'upcoming'),
         venue: ((m.venueCourt || {}).venue || {}).shortName || ((m.venueCourt || {}).venue || {}).name || '', court: (m.venueCourt || {}).name || '' });

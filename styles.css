@@ -524,3 +524,9 @@ a.fn-game:hover { border-color: var(--blue); color: inherit; }
 .ev-also { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #FDECEC; border: 1px solid #F3C4C4; color: #7A1A14; border-radius: 12px; padding: 10px 14px; font-weight: 600; }
 .linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--blue); text-decoration: underline; cursor: pointer; }
 .ev-also .linkish { color: #7A1A14; font-weight: 700; }
+.ev-medals { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
+.ev-medal { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.ev-medal span:not(.medal) { color: var(--muted); font-size: 13px; }
+.medal { flex: none; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+.medal.gold { background: #F9B129; color: #2E2200; box-shadow: inset 0 0 0 2px #D99400; }
+.medal.silver { background: #D5D8D6; color: #2B302D; box-shadow: inset 0 0 0 2px #A9AEAB; }
