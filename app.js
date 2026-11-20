@@ -330,7 +330,8 @@
       r.finals = r.games.filter((g) => g.status === 'final').length;
       const isFin = r.games.some((g) => g.finals) || !/^round\s*\d+$/i.test(r.name);
       // Pool rounds by date, then finals by stage (semis before the grand final), then date.
-      r.order = (isFin ? 1e15 + (STAGE_RANK[r.name] || 0) * 1e13 : 0) + r.first.getTime();
+      const rn = parseInt((r.name.match(/^round\s*(\d+)/i) || [])[1], 10) || 0;
+      r.order = (isFin ? 1e15 + (STAGE_RANK[r.name] || 0) * 1e13 : rn * 1e13) + r.first.getTime();
     });
     rounds.sort((a, b) => a.order - b.order);
     rounds.forEach((r, i) => { r.seq = i; });
