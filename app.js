@@ -434,7 +434,9 @@
       }).join('') + '</div></section>';
     }
 
-    html += '<div class="page-head"><div><div class="eyebrow">' + esc(fLongDay.format(new Date())) + '</div><h1 class="page-title">Game day</h1>' +
+    // A finished event with nothing left in the window: the finished card says it all.
+    const quiet = evState === 'finished' && !ageGames.length && ui.age === 'All' && ui.sex === 'All';
+    if (!quiet) html += '<div class="page-head"><div><div class="eyebrow">' + esc(fLongDay.format(new Date())) + '</div><h1 class="page-title">Game day</h1>' +
       '<div class="page-sub">' + (live.length ? live.length + ' live · ' : '') + upcoming.length + (upcoming.length === 1 ? ' ' + CLUB + ' game' : ' ' + CLUB + ' games') + (venue ? ' at ' + esc(venue.name) : '') + (evState === 'upcoming' ? '' : ' in the next week') + '</div></div></div>' + filterChips(ages);
 
     if (venues.length > 1 || venue) {
