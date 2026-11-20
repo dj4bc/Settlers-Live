@@ -359,6 +359,9 @@
     return { games, teams, rounds, fetchedAt: new Date() };
   }
 
+  /* A final with no score recorded either side (shown as N/R). */
+  const noResult = (g) => g.status === 'final' && !g.bye && !(g.s1 || 0) && !(g.s2 || 0);
+
   /* The game seen from one of our teams' side. */
   function view(g, teamId) {
     let us = g.t1, them = g.t2, su = g.s1, sth = g.s2, home = true;
@@ -459,7 +462,8 @@
     const justDone = (g) => g.status === 'final' && justFinal.has(g.id) && now - justFinal.get(g.id) < 15 * 60e3;
     const live = games.filter((g) => g.status === 'live' || justDone(g));
     const upcoming = games.filter((g) => g.status === 'upcoming');
-    const recent = games.filter((g) => g.status === 'final' && !justDone(g)).reverse();
+    // Finals with no score recorded (shown as N/R) are left out here; they still show in Results.
+    const recent = games.filter((g) => g.status === 'final' && !justDone(g) && !noResult(g)).reverse();
     let html = eventCards();
 
     const mine = myTeamIds().filter((id) => DATA.teams.has(id)).map((id) => DATA.teams.get(id)).sort(teamSort);
