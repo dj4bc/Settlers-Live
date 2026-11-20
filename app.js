@@ -253,6 +253,21 @@
   }
 
   // Rounds in a tournament mix "Round 3" with finals names. Short labels for tabs and tiles.
+  // BasketballConnect names finals rounds differently in each tournament: "SF" and "GF",
+  // "Semi Final", or "Finals - Round 1" with the real stage only in the game's finals alias
+  // ("SF1", "GF1"). Work out the real stage so tabs and labels say Semi final / Grand final.
+  const STAGE_RANK = { 'Quarter Final': 1, 'Elimination Final': 1, 'Crossover': 2, 'Semi Final': 3, 'Preliminary Final': 4, 'Grand Final': 5 };
+  function stageOf(name, alias) {
+    const n = String(name || '').trim(), a = String(alias || '').trim().toUpperCase();
+    if (/^GF/.test(a) || /^GF$|grand/i.test(n)) return 'Grand Final';
+    if (/^PF/.test(a) || /^PF$|prelim/i.test(n)) return 'Preliminary Final';
+    if (/^SF/.test(a) || /^SF$|semi/i.test(n)) return 'Semi Final';
+    if (/^QF/.test(a) || /^QF$|quarter/i.test(n)) return 'Quarter Final';
+    if (/^EF/.test(a) || /^EF$|elim/i.test(n)) return 'Elimination Final';
+    if (/cross/i.test(n)) return 'Crossover';
+    return n;
+  }
+
   function roundShort(name) {
     const n = String(name || '');
     if (/grand final/i.test(n)) return 'GF';
@@ -260,6 +275,7 @@
     if (/semi/i.test(n)) return 'SF';
     if (/cross/i.test(n)) return 'XO';
     if (/quarter/i.test(n)) return 'QF';
+    if (/elim/i.test(n)) return 'EF';
     if (/final/i.test(n)) return 'F' + ((n.match(/\d+/) || [''])[0]);
     return 'R' + ((n.match(/\d+/) || ['–'])[0]);
   }
@@ -275,7 +291,8 @@
         const vc = m.venueCourt || {}, v = vc.venue || {};
         games.push({
           id: m.id,
-          round: rd.name || ('Round ' + ((rd.sequence || 0) + 1)),
+          round: stageOf(rd.name || ('Round ' + ((rd.sequence || 0) + 1)), m.finalsAlias),
+          roundRaw: rd.name || '',
           roundSeq: rd.sequence != null ? rd.sequence : 0,
           division: (rd.division && rd.division.name) || '',
           divisionShort: [comp.label, shortDivision(rd.division && rd.division.name)].filter(Boolean).join(' · '),
@@ -312,7 +329,8 @@
       r.first = r.games[0].start; r.last = r.games[r.games.length - 1].start;
       r.finals = r.games.filter((g) => g.status === 'final').length;
       const isFin = r.games.some((g) => g.finals) || !/^round\s*\d+$/i.test(r.name);
-      r.order = (isFin ? 1e15 : 0) + r.first.getTime();
+      // Pool rounds by date, then finals by stage (semis before the grand final), then date.
+      r.order = (isFin ? 1e15 + (STAGE_RANK[r.name] || 0) * 1e13 : 0) + r.first.getTime();
     });
     rounds.sort((a, b) => a.order - b.order);
     rounds.forEach((r, i) => { r.seq = i; });
@@ -874,7 +892,7 @@
     (json.rounds || []).forEach((rd) => (rd.matches || []).forEach((m) => {
       if (m.divisionId && m.divisionId !== divId) return;
       const st = (m.matchStatus || '').toUpperCase();
-      games.push({ id: m.id, round: rd.name || '', finals: !!m.isFinals || !!m.finalsAlias, alias: m.finalsAlias || '',
+      games.push({ id: m.id, round: stageOf(rd.name, m.finalsAlias), finals: !!m.isFinals || !!m.finalsAlias, alias: m.finalsAlias || '',
         start: new Date(m.startTime), n1: ((m.team1 && m.team1.name) || '').trim(), n2: ((m.team2 && m.team2.name) || '').trim(),
         s1: m.team1Score, s2: m.team2Score, status: st === 'ENDED' ? 'final' : (st && !/POSTPONED|CANCEL|ABANDON/.test(st) ? 'live' : 'upcoming'),
         venue: ((m.venueCourt || {}).venue || {}).shortName || ((m.venueCourt || {}).venue || {}).name || '', court: (m.venueCourt || {}).name || '' });
