@@ -22,6 +22,11 @@ window.CLUB_CONFIG = {
       id: 2803, key: 'a0d1e374-4f1b-423c-b803-619b9f4fdc29'
     },
     {
+      slug: 'port-augusta-2026', name: 'Port Augusta Junior Basketball Carnival 2026', short: 'Port Augusta Carnival',
+      start: '2026-10-31', end: '2026-11-01',
+      id: 3008, key: 'c5edf338-2b60-4b89-8acc-e0c2ab2b3b39'
+    },
+    {
       slug: 'barossa-2026', name: 'Barossa Valley Junior Basketball Tournament 2026', short: 'Barossa Valley Tournament',
       start: '2026-11-13', end: '2026-11-15',
       id: 3023, key: '01c8fecd-0b0d-4bc3-adf2-cedc6092b39a',
