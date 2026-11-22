@@ -17,15 +17,36 @@
   // Each event is one tournament (one or more BasketballConnect competitions). The site shows one at a time.
   // A config without `events` (like the Lions site) is one event made of all its competitions.
   const fixtureUrl = (key) => key && CFG.orgKey ? 'https://registration.basketballconnect.com/livescoreSeasonFixture?organisationKey=' + CFG.orgKey + '&yearId=' + (CFG.yearId || 9) + '&competitionUniqueKey=' + key + '&divisionId=All' : '';
-  const EVENTS = (CFG.events && CFG.events.length ? CFG.events : [{ slug: 'season', name: CFG.seasonLabel, comps: CFG.competitions }]).map((e, i) => ({
+  const mkEvent = (e, i) => ({
     slug: e.slug || 'event-' + i,
     name: e.name || CFG.seasonLabel || '',
     short: e.short || e.name || CFG.seasonLabel || '',
     start: e.start || '', end: e.end || e.start || '',
     comps: (e.comps || [e]).map((c) => ({ id: c.id, key: c.key || '', label: c.label || '', teamIds: c.teamIds || null, sourceUrl: c.sourceUrl || fixtureUrl(c.key) })),
     data: null, error: null
-  }));
-  const MULTI = EVENTS.length > 1;
+  });
+  const EVENTS = (CFG.events && CFG.events.length ? CFG.events : [{ slug: 'season', name: CFG.seasonLabel, comps: CFG.competitions }]).map(mkEvent);
+  let MULTI = EVENTS.length > 1;
+  // Tournaments found automatically: the club's server checks BasketballConnect's public fixture
+  // list each week and publishes any new competition with our teams in it. Ones already in
+  // config.js are skipped, so a hand-written entry always wins.
+  async function addFeedEvents() {
+    if (!CFG.eventsFeed) return;
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
+      const res = await fetch(CFG.eventsFeed, { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(t);
+      if (!res.ok) return;
+      const j = await res.json();
+      const have = new Set([].concat(...EVENTS.map((e) => e.comps.map((c) => c.id))));
+      (j.events || []).forEach((e) => {
+        if (!e || !e.id || !e.start || have.has(e.id)) return;
+        have.add(e.id);
+        EVENTS.push(mkEvent({ slug: e.slug, name: e.name, short: e.short, start: e.start, end: e.end, id: e.id, key: e.key }, EVENTS.length));
+      });
+      MULTI = EVENTS.length > 1;
+    } catch (e) { /* the config list is enough */ }
+  }
   let EVENT = null;
   let refreshTimer = null;
   const ui = { age: 'All', sex: 'All', venue: 'All', round: null };
@@ -1659,5 +1680,5 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !refreshTimer) load(true); });
 
   renderEventSwitch();
-  load(false);
+  addFeedEvents().finally(() => load(false));
 })();

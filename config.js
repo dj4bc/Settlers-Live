@@ -41,6 +41,9 @@ window.CLUB_CONFIG = {
       id: 3016, key: 'c7d3157a-26af-46aa-9bc6-69902a7cbd61'
     }
   ],
+  // New tournaments found by the club's server each week (any competition with our teams that
+  // isn't listed above). Leave empty to use only the list above.
+  eventsFeed: 'https://fouls.adamforb.es/events/settlers.json',
   // A regular expression that matches our team names, such as "Barossa U14B1 Green",
   // "Barossa Valley U12G2" or "U18B2 - Barossa Valley".
   clubPattern: '\\bBarossa\\b',
