@@ -8,6 +8,7 @@ A static website for Barossa Settlers results, fixtures and live scores, cloned 
 - **Results** (`#/results/<n>`): pick a round (R1, R2 … then finals: F1, SF, XO, GF) to see wins, losses, the biggest win, and each age group's results. Filter by age and boys/girls.
 - **Teams** (`#/teams`): every Settlers team with their form and record.
 - **Box score** (`#/game/<matchId>`): points, free throws, 2s, 3s and fouls for each player. Refreshes every 30 seconds during live games.
+- **Play by play** (game page, under the score): a "Play by play" tab beside "Live fouls", swipe or tap to switch. Reads `plays` from the scraper's match JSON and stays hidden until it exists.
 - **Team page** (`#/team/<id>`): player stats, record, points for and against, next game with directions, results and fixtures. "Add to my teams" pins the team to Game day (saved in the visitor's own browser).
 
 ## Player names
