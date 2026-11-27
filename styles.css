@@ -574,3 +574,11 @@ a.fn-game:hover { border-color: var(--blue); color: inherit; }
 
 .stale-note { background: #FFF5DB; border: 1px solid #E8CF8A; color: #6B4700; border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 600; line-height: 1.35; }
 .stale-note[hidden] { display: none; }
+
+/* Unfinalised: still LIVE on BasketballConnect an hour past its scheduled finish.
+   Outlined, so it reads differently from the solid gold LIVE tag. */
+.live-card.unfinal .live-dot { background: #FFD45C; animation: none; }
+.live-card.unfinal .label { color: #FFD45C; }
+.uf-note { font-size: 13px; font-weight: 600; color: #FFD45C; }
+.badge.UF { background: #FFF5DB; border: 2px solid #F4B400; color: var(--gold-text); font-size: 10px; box-sizing: border-box; }
+.tag.uf { background: transparent; color: #FFD45C; box-shadow: inset 0 0 0 2px #FFD45C; }
