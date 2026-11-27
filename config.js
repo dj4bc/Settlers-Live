@@ -54,6 +54,10 @@ window.CLUB_CONFIG = {
   // Game alerts (web push) service on the Linode. Leave empty to hide the alerts switch.
   pushBase: 'https://fouls.adamforb.es/push',
   timeZone: 'Australia/Adelaide',
+  // Normal game length in minutes, tip-off to final siren. An event can set its own gameMins.
+  // A game still LIVE on BasketballConnect an hour after that shows as UNFINALISED (yellow dot) and
+  // moves from "Live now" to "Waiting on result" on Game day until BasketballConnect ends it.
+  gameMins: 45,
   // How often to refresh while any Settlers game is live (milliseconds).
   liveRefreshMs: 60000
 };
