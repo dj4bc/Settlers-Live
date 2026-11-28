@@ -667,7 +667,7 @@
     const div = (next || tg[tg.length - 1] || {}).divisionShort || '';
     const mine = isMyTeam(id);
 
-    let html = '<p style="margin:0"><a href="#/teams">← All teams</a></p><div class="team-layout"><div style="display:flex;flex-direction:column;gap:20px">' +
+    let html = '<p style="margin:0"><a class="back-btn" href="#/teams"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All teams</a></p><div class="team-layout"><div style="display:flex;flex-direction:column;gap:20px">' +
       '<section class="team-hero"><div class="team-hero-top"><img src="shield.png?v=1" alt=""><div class="team-hero-name"><div class="age">' + esc(groupName(t)) + '</div><h1>' + esc(t.short) + '</h1><div class="div">' + esc(div) + '</div></div>' +
       '<button class="star" type="button" data-star="' + id + '" aria-pressed="' + mine + '">' + starIcon + (mine ? 'My team' : 'Add to my teams') + '</button></div>' +
       '<div class="hero-stats"><div class="hero-stat"><span>Record</span><b>' + rec.W + '–' + rec.L + (rec.D ? '–' + rec.D : '') + '</b></div>' +
@@ -764,7 +764,7 @@
     if (!g) return '<div class="notice"><h2>Game not found</h2><a href="#/results">All results</a></div>';
     const v = view(g);
     const status = g.unfinal ? '<span class="tag uf">UNFINALISED</span>' : g.status === 'live' ? '<span class="tag">LIVE</span>' : g.status === 'final' ? '<span class="tag quiet">FINAL</span>' : '<span class="tag quiet">' + esc(dayLabel(g.start).toUpperCase() + ' ' + time(g.start)) + '</span>';
-    return '<p style="margin:0"><a href="#/team/' + v.us.id + '">← ' + esc(groupName(v.us) + ' ' + v.us.short) + '</a></p>' +
+    return '<p style="margin:0"><a class="back-btn" href="#/team/' + v.us.id + '"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>' + esc(groupName(v.us) + ' ' + v.us.short) + '</a></p>' +
       '<section class="game-hero" data-final="' + g.id + '"><div class="next-top">' + status + '<span class="game-meta">' + esc(g.round + ' · ' + fDay.format(g.start) + ' · ' + time(g.start)) + '</span></div>' +
       '<div class="game-lines"><a href="#/team/' + v.us.id + '" class="gt">' + logo(v.us, 34) + esc(groupName(v.us) + ' ' + v.us.short) + '</a><span class="gs" data-gs="us" data-g="' + g.id + '">' + esc(g.status === 'upcoming' ? '–' : shownScore(g, v, 'us')) + '</span>' +
       '<span class="gt opp">' + logo(v.them, 34) + esc(v.them ? (v.them.ours ? v.them.short : v.them.club) : 'Bye') + '</span><span class="gs opp" data-gs="them" data-g="' + g.id + '">' + esc(g.status === 'upcoming' ? '–' : shownScore(g, v, 'them')) + '</span></div>' +
